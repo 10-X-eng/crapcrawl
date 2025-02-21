@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Crawler</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Document Crawler</h1>
+        
+        <form id="crawlForm">
+            <div class="form-group">
+                <label for="sitemapUrl">Sitemap URL:</label>
+                <input type="url" id="sitemapUrl" name="sitemap_url" required>
+            </div>
+            <div class="form-group">
+                <label for="apiKey">OpenAI API Key:</label>
+                <input type="password" id="apiKey" name="openai_api_key" required>
+            </div>
+            <div class="form-group">
+                <label for="maxConcurrent">Max Concurrent Requests:</label>
+                <input type="number" id="maxConcurrent" name="max_concurrent" value="10" min="1" required>
+            </div>
+            <div class="form-group">
+                <label for="model">OpenAI Model:</label>
+                <input type="text" id="model" name="openai_model" value="gpt-4o-mini" required>
+            </div>
+            <button type="submit">Start Crawl</button>
+        </form>
+
+        <div id="status">
+            <h2>Status</h2>
+            <pre id="statusText">No job running</pre>
+            <button id="downloadBtn" disabled>Download Result</button>
+        </div>
+    </div>
+
+    <script>
+        let jobId = null;
+
+        document.getElementById('crawlForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const payload = Object.fromEntries(formData);
+
+            try {
+                const response = await fetch('/crawl', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                jobId = data.job_id;
+                document.getElementById('statusText').textContent = `Job started with ID: ${jobId}\nStatus: ${data.status}`;
+                document.getElementById('downloadBtn').disabled = true;
+                monitorStatus();
+            } catch (error) {
+                alert(`Error starting crawl: ${error.message}`);
+            }
+        });
+
+        async function monitorStatus() {
+            if (!jobId) return;
+            const statusText = document.getElementById('statusText');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            while (true) {
+                try {
+                    const response = await fetch(`/status/${jobId}`);
+                    if (!response.ok) throw new Error(await response.text());
+                    const data = await response.json();
+                    statusText.textContent = `
+Job ID: ${data.job_id}
+Status: ${data.status}
+Created At: ${data.created_at}
+Completed At: ${data.completed_at || 'N/A'}
+Total URLs: ${data.total_urls || 'N/A'}
+Crawled URLs: ${data.crawled_urls}/${data.total_urls || 'N/A'}
+AI Processed URLs: ${data.ai_processed_urls}/${data.total_urls || 'N/A'}
+Failed URLs: ${data.failed_urls.length}
+Message: ${data.message || 'N/A'}
+                    `.trim();
+                    if (data.status === 'completed') {
+                        downloadBtn.disabled = false;
+                        break;
+                    } else if (data.status === 'failed') {
+                        break;
+                    }
+                } catch (error) {
+                    statusText.textContent = `Error checking status: ${error.message}`;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
+            }
+        }
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (jobId) {
+                window.location.href = `/download/${jobId}`;
+            }
+        });
+    </script>
+</body>
+</html>

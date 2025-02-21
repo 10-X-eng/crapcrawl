@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+jinja2
+pydantic
+aiofiles
+requests
+psutil
+openai
+crawl4ai
+asyncio
+python-multipart
